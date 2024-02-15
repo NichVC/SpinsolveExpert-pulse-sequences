@@ -1,0 +1,109 @@
+############################################################
+#  
+# Made by NVC, last updated 10-08-2021
+# 
+# A pulse sequence for performing a Hyperpolarized Timeseries 
+# experiment, with the selective Sinc-Cos pulse + Decoupling.
+#
+# pulse - delay - acq w/dec
+#
+############################################################
+
+procedure(pulse_program,dir,mode)
+
+# Interface description (name, label, ctrl, vartype)
+  interface = ["nucleus",         "Nucleus",                   "tb",  "readonly_string";
+               "b1Freq13C",       "13C frequency (MHz)",       "tb", "freq";
+               "centerFreqPPM",   "Centre frequency (ppm)",    "tb",  "float";
+               "b1Freq1H",        "1H frequency (MHz)",        "tb", "freq";
+               "timeseriesSteps", "Time series steps",         "tm",  "float,[2,5,8,10,12,15,50,80,120,150,200]";
+               "maxAmplitude",    "MAX Pulse amplitude (dB)",  "tb",  "pulseamp";
+               "stepLength",      "Step length (us)",          "tb",  "float,[2,100]";
+               "steps",           "Number of steps",           "tb",  "integer,[10,1000]";
+               "shiftPoints",     "Number of points to shift", "tb",  "float,[-100,100]";
+               "pulseLengthH180", "1H 180 pulse length (us)",  "tb", "pulselength";
+               "decoupleAmp",     "Decouple amplitude (dB)",   "tb", "pulseamp";
+               "preacqDelay",     "Pre-acqu. delay (us)",      "tb", "sdelay";
+               "repTime",         "Repetition time (ms)",      "tb",  "reptime";
+               "acquDiv",         "Acquisition",               "dv",   "";
+               "rxGain",          "Receiver gain",             "tm",  "integer,[-20:3:70]";
+               "rxChannel",       "Receiver channel",          "tm",  "string,[\"1H\",\"13C\",\"15N\",\"19F\",\"29Si\",\"31P\",\"X\"]";
+               "rxPhase",         "Receiver phase",            "tb",  "float,[-360,360]";
+               "nrPnts",          "Number of points",          "tm",  "integer,[4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768]";
+               "dwellTime",       "Dwell time (us)",           "tm",  "float,[0.5,1,2,5,10,20,50,100,200,500,1000,2000]";
+               "nrScans",         "Number of scans",           "tb",  "float,[1,1e8]";
+               "flatFilter",      "Flat filter",               "cb",  "no,yes";
+               "accumulate",      "Accumulate data",           "cb",  "no,yes";
+               "usePhaseCycle",   "Phase cycle",               "cb",  "no,yes";
+               "bandwidth",       "Bandwidth (kHz)",           "tb2", "float";
+               "acqTime",         "Acquisition time (ms)",     "tb",  "float";
+               "procDiv",         "Processing",                "dv",  "";
+               "zf",              "Zero fill factor?",         "tm",  "integer,[1,2,4,8,16]";
+               "filter",          "Apodisation filter?",       "cb",  "no,yes";
+               "filterType",      "Filter type",               "tm", "string,[\"none\",\"exponential\",\"sinebellsquared\"]";
+               "tdPhaseCorr",     "Time. domain phasing",      "tm", "string,[\"autophase\",\"mag\",\"none\"]";
+               "fdPhaseCorr",     "Freq. domain phasing",      "tm", "string,[\"autophase\",\"mag\",\"none\"]";
+               "dispDiv",         "Display",                   "dv",  "";
+               "usePPMScale",     "Use ppm scale?",            "cb",  "no,yes";
+               "dispRangeMinPPM", "Minimum ppm value",         "tb",  "float,[-2000,2000]";
+               "dispRangeMaxPPM", "Maximum ppm value",         "tb",  "float,[-2000,2000]";
+               "dispRange",       "Display range (Hz)",        "tb",  "float,[0,2e6]";
+               "filesDiv",        "Files",                     "dv",  "";
+               "saveData",        "Save data?",                "cb",  "false,true"]
+
+# Define the tab groups and their order
+#   groups = ["Pulse_sequence","Acquisition",
+#             "Processing_Std","Display_Std","File_Settings"]
+
+# Relationships to determine remaining variable values
+   relationships = ["b1Freq = b1Freq13C",
+                    "n1 = steps",
+                    "d1 = stepLength",
+                    "waltzDuration = WALTZ16:duration(pulseLengthH180/2,pgo)",
+                    "(t1,t2) = Carbon_SincCos_TIMESERIES_dec:calculateTables(maxAmplitude,steps)",
+                    "nDataPnts  = nrPnts",
+                    "offFreq13C  = (centerFreqPPM-wvPPMOffset13C)*b1Freq13C",
+                    "O1         = offFreq13C",
+                    "freq13C       = double(b1Freq13C)+double(offFreq13C/1e6d)",
+                    "freq1H        = double(b1Freq1H)",
+                    "dPreAcq       = preacqDelay",
+                    "totPnts    = nrPnts",
+                    "totTime    = acqTime",
+                    "aDEC          = decoupleAmp",
+                    "d90           = pulseLengthH180/2",
+                    "d180          = pulseLengthH180",
+                    "d270          = 3*pulseLengthH180/2",
+                    "d360          = 2*pulseLengthH180",
+                    "n2            = trunc(1000*acqTime/waltzDuration)+1"]
+
+# These parameters will be changed between experiments
+   variables = [""]
+
+# Pulse sequence
+   initpp(dir)                      # Define compile directory and clear parameter list
+   
+   cleardata(nDataPnts)
+   settxfreqs(freq1H,freq13C) # Set Proton and Carbon Tx frequencies
+   
+   delay(5000)                     # Wait 5 ms allowing time to finish lock scan
+   shapedrf(2,t1,t2,p1,n1,d1)       # Shaped RF pulse on channel 2 with phase p1
+   delay(dPreAcq)
+
+
+  # Acquire with 1H decoupling
+   acquireon(nDataPnts)
+   loop(l1,n2)
+      WALTZ16(1, aDEC, d90, d180, d270, d360, p2, p3)
+   endloop(l1)   
+   acquireoff("overwrite", nDataPnts)
+
+   parList = endpp()                # Combine commands and return parameter list
+
+# Phase cycle list
+   phaseList = [0,2,0,2; # 90 phase
+                0,0,2,2;
+                2,2,0,0;
+                0,2,0,2] # Acquire phase
+
+
+endproc(parList,list(0),interface,relationships,variables,null,phaseList)
