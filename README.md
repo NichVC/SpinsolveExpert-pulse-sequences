@@ -10,3 +10,5 @@ Sequences implemented in SpinsolveExpert 1.41.10. The 4 pulse programs can be fo
 Place the pulse programs in a folder like C:\Users\XXXX\Applications\Custom Pulse Programs
 
 In Spinsolve Expert add the folder with the custom pulse programs and recompile them.
+
+Christensen NV, Laustsen C, Bertelsen LB. Differentiating leukemia subtypes based on metabolic signatures using hyperpolarized 13C NMR. NMR in Biomedicine. 2024;e5264. [doi:10.1002/nbm.5264](https://doi.org/10.1002/nbm.5264)
